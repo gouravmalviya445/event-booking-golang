@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gouravmalviya445/event-booking-golang/internal/config"
+	"github.com/gouravmalviya445/event-booking-golang/internal/http/handlers/booking"
 )
 
 func main() {
@@ -22,9 +23,7 @@ func main() {
 	// setup router
 	r := http.NewServeMux()
 
-	r.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("welcome to event booking service"))
-	})
+	r.HandleFunc("POST /api/bookings", booking.CreateBooking())
 
 	// setup server
 	srv := http.Server{
