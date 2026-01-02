@@ -12,7 +12,7 @@ import (
 
 // http-serve
 type HTTPServer struct {
-	Port string `yaml:"port" env:"PORT" env-default:"8080"`
+	Addr string `yaml:"address" env:"ADDRESS" env-required:"true"`
 }
 
 // db
