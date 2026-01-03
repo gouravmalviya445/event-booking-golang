@@ -17,7 +17,7 @@ type HTTPServer struct {
 
 // db
 type Database struct {
-	Url    string `yaml:"url" env:"DATABASE_URL"`
+	URI    string `yaml:"uri" env:"MONGODB_URI"`
 	DbName string `yaml:"db_name" env:"DB_NAME"`
 }
 

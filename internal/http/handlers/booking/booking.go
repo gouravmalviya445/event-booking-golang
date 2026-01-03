@@ -13,7 +13,7 @@ import (
 )
 
 // create booking of an event
-func CreateBooking() http.HandlerFunc {
+func Create() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("create a booking")
 
