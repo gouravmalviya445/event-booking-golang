@@ -56,3 +56,8 @@ func (m MongoDB) CreateBooking(userId, eventId string) (string, error) {
 
 	return "", nil
 }
+
+// disconnect
+func (m MongoDB) Close(ctx context.Context) error {
+	return m.Client.Disconnect(ctx)
+}

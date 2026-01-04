@@ -24,8 +24,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer func ()  {
-		// TODO: add logic for mongodb disconnect
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+		// disconnect to database
+		if err = storage.Close(ctx); err != nil {
+			log.Fatal("Error in disconnecting from database", err)
+		}
 	}()
 
 	// setup router
