@@ -9,11 +9,12 @@ import (
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/gouravmalviya445/event-booking-golang/internal/storage"
 	"github.com/gouravmalviya445/event-booking-golang/internal/utils/response"
 )
 
 // create booking of an event
-func Create() http.HandlerFunc {
+func Create(storage storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("create a booking")
 
