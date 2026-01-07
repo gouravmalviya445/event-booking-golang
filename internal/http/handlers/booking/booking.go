@@ -11,6 +11,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/gouravmalviya445/event-booking-golang/internal/storage"
 	"github.com/gouravmalviya445/event-booking-golang/internal/utils/response"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // create booking of an event
@@ -43,5 +44,42 @@ func Create(storage storage.Storage) http.HandlerFunc {
 			)
 			return
 		}
+
+		userId, err := bson.ObjectIDFromHex(booking.UserId)
+		if err != nil {
+			response.WriteJson(
+				w,
+				http.StatusBadRequest,
+				response.GeneralError(fmt.Errorf("invalid userId")),
+			)
+			return
+		}
+		eventId, err := bson.ObjectIDFromHex(booking.EventId)
+		if err != nil {
+			response.WriteJson(
+				w,
+				http.StatusBadRequest,
+				response.GeneralError(fmt.Errorf("invalid eventId")),
+			)
+			return
+		}
+
+		bookingDetails, err := storage.CreateBooking(userId, eventId)
+		if err != nil {
+			response.WriteJson(
+				w,
+				http.StatusInternalServerError,
+				response.GeneralError(err),
+			)
+			return
+		}
+
+		response.WriteJson(
+			w,
+			http.StatusCreated,
+			response.GeneralResponse(map[string]any{
+				"bookingDetails": bookingDetails,
+			}),
+		)
 	}
 }
