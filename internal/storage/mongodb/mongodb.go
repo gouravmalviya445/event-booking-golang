@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
+	"os"
 	"time"
 
 	"github.com/gouravmalviya445/event-booking-golang/internal/config"
@@ -13,6 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readconcern"
 )
 
 type MongoDB struct {
@@ -20,7 +21,7 @@ type MongoDB struct {
 	Db     *mongo.Database
 
 	// locks map an eventId -> *sync.mutex
-	locks sync.Map // this is the special map that is useful for concurrent task
+	// locks sync.Map // this is the special map that is useful for concurrent task
 }
 
 // create an instance of MongoDB struct
@@ -35,6 +36,10 @@ func New(cfg *config.Config) (*MongoDB, error) {
 
 	// Define the options for mongodb client
 	opts := options.Client().ApplyURI(cfg.Database.URI).SetServerAPIOptions(serverAPI)
+
+	if os.Getenv("ENV") == "development" {
+		opts.SetDirect(true) // force to connect with standalone
+	}
 
 	// connect to mongodb with ClientOptions
 	client, err := mongo.Connect(opts)
@@ -59,79 +64,83 @@ func New(cfg *config.Config) (*MongoDB, error) {
 }
 
 // HELPER METHOD
-func (m *MongoDB) getLockForEvent(eventId bson.ObjectID) *sync.Mutex {
-	// If User A is booking a ticket for "Coldplay," User B has to wait to book a ticket for "IPL Final."
-	// So Instead of locking the whole database, we should only lock the specific Event ID
-	// User A locks "Coldplay", User B locks "IPL Final" simultaneously
+// func (m *MongoDB) getLockForEvent(eventId bson.ObjectID) *sync.Mutex {
+// 	// If User A is booking a ticket for "Coldplay," User B has to wait to book a ticket for "IPL Final."
+// 	// So Instead of locking the whole database, we should only lock the specific Event ID
+// 	// User A locks "Coldplay", User B locks "IPL Final" simultaneously
 
-	// LoadOrStore tries to load the lock. If it doesn't exist, it saves a new one.
-	lock, _ := m.locks.LoadOrStore(eventId, &sync.Mutex{})
+// 	// LoadOrStore tries to load the lock. If it doesn't exist, it saves a new one.
+// 	lock, _ := m.locks.LoadOrStore(eventId, &sync.Mutex{})
 
-	// We must cast the empty interface{} back to a Mutex pointer
-	return lock.(*sync.Mutex)
-}
+// 	// We must cast the empty interface{} back to a Mutex pointer
+// 	return lock.(*sync.Mutex)
+// }
 
 // implement storage interface "/internal/storage/storage.go"
 func (m *MongoDB) CreateBooking(userId, eventId bson.ObjectID) (*models.Booking, error) {
-	eventLock := m.getLockForEvent(eventId)
-	eventLock.Lock()
-	defer eventLock.Unlock()
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
 	eventCollection := m.Db.Collection("events")
 	bookingCollection := m.Db.Collection("bookings")
 
-	var event models.Event // event model
-	fmt.Println("Searching for ID:", eventId)
-	fmt.Println("In Database:", m.Db.Name())
-	fmt.Println("In Collection:", eventCollection.Name())
+	tnxOpts := options.
+		Transaction().
+		SetReadConcern(readconcern.Majority())
+	sessionOpts := options.
+		Session().
+		SetDefaultTransactionOptions(tnxOpts)
 
-	// check if event is exist or not
-	filter := bson.M{"_id": eventId}
-	err := eventCollection.FindOne(ctx, filter).Decode(&event)
+	// Starts a session on the client
+	session, err := m.Client.StartSession(sessionOpts)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return nil, fmt.Errorf("event not found")
+		return nil, err
+	}
+
+	defer session.EndSession(ctx)
+
+	// start transaction
+	result, err := session.WithTransaction(ctx, func(ctx context.Context) (any, error) {
+		filter := bson.M{
+			"_id":            eventId,
+			"availableSeats": bson.M{"$gt": 0},
 		}
-		return nil, fmt.Errorf("failed to find event: %w", err)
-	}
+		update := bson.M{"$inc": bson.M{"availableSeats": -1}}
 
-	// if tickets not available
-	if event.AvailableSeats <= 0 {
-		return nil, fmt.Errorf("sold out")
-	}
-
-	update := bson.M{"$inc": bson.M{"availableSeats": -1}}
-	_, err = eventCollection.UpdateOne(ctx, filter, update)
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, fmt.Errorf("booking failed query is taking more time")
+		var event models.Event // event model
+		err = eventCollection.FindOneAndUpdate(ctx, filter, update).Decode(&event)
+		if err != nil {
+			if errors.Is(err, mongo.ErrNoDocuments) {
+				return nil, fmt.Errorf("event sold out or not found")
+			}
+			return nil, err
 		}
-		return nil, fmt.Errorf("failed to update inventory: %w", err)
-	}
 
-	formattedTime := time.Now().Format(time.DateTime)
-	parsedTime, err := time.Parse(time.DateTime, formattedTime)
+		now := time.Now().UTC()
+		booking := models.Booking{
+			ID:         bson.NewObjectID(),
+			UserID:     userId,
+			EventID:    eventId,
+			Status:     "confirmed", // TODO: first payment then book
+			Tickets:    1,           // TODO: add multiple ticket buying option
+			TotalPrice: event.Price * 1,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
 
-	booking := models.Booking{
-		ID: bson.NewObjectID(),
-		UserID:     userId,
-		EventID:    eventId,
-		Status:     "confirmed", // TODO: first payment then book
-		Tickets:    1,           // TODO: add multiple ticket buying option
-		TotalPrice: event.Price * 1,
-		CreatedAt:  parsedTime,
-		UpdatedAt:  parsedTime,
-	}
+		_, err = bookingCollection.InsertOne(ctx, booking)
+		if err != nil {
+			slog.Error(err.Error())
+			return nil, fmt.Errorf("failed to create booking %w", err)
+		}
+		return &booking, nil
+	})
 
-	_, err = bookingCollection.InsertOne(ctx, booking)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create booking %w", err)
+		return nil, err
 	}
 
-	return &booking, nil
+	return result.(*models.Booking), nil
 }
 
 // disconnect
