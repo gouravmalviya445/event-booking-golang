@@ -52,3 +52,12 @@ func (r *Razorpay) VerifyPayment(paymentId, orderId, signature string) bool {
 func (r *Razorpay) VerifyWebhook(webhookBody, signature string) bool {
 	return utils.VerifyWebhookSignature(webhookBody, signature, apiSecret)
 }
+
+func (r *Razorpay) RefundPayment(paymentId string, amount int) (string, error) {
+	data := map[string]interface{}{"speed": "normal"}
+	body, err := r.Client.Payment.Refund(paymentId, amount, data, nil)
+	if err != nil {
+		return "", fmt.Errorf("refund not initiated")
+	}
+	return body["id"].(string), nil
+}
