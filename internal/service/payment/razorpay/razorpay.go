@@ -6,6 +6,7 @@ import (
 	"os"
 
 	rzp "github.com/razorpay/razorpay-go"
+	"github.com/razorpay/razorpay-go/utils"
 )
 
 type Razorpay struct {
@@ -37,4 +38,13 @@ func (r *Razorpay) CreateOrder(amount int64, currency string) (string, error) {
 	}
 	orderId := body["id"].(string)
 	return orderId, nil
+}
+
+func (r *Razorpay) VerifyPayment(paymentId, orderId, signature string) bool {
+	params := map[string]interface{}{
+		"razorpay_order_id":   orderId,
+		"razorpay_payment_id": paymentId,
+	}
+
+	return utils.VerifyPaymentSignature(params, signature, apiSecret)
 }
