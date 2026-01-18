@@ -48,3 +48,7 @@ func (r *Razorpay) VerifyPayment(paymentId, orderId, signature string) bool {
 
 	return utils.VerifyPaymentSignature(params, signature, apiSecret)
 }
+
+func (r *Razorpay) VerifyWebhook(webhookBody, signature string) bool {
+	return utils.VerifyWebhookSignature(webhookBody, signature, apiSecret)
+}
