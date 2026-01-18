@@ -9,20 +9,21 @@ import (
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/gouravmalviya445/event-booking-golang/internal/service/payment"
 	"github.com/gouravmalviya445/event-booking-golang/internal/storage"
 	"github.com/gouravmalviya445/event-booking-golang/internal/utils/response"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // create booking of an event
-func Create(storage storage.Storage) http.HandlerFunc {
+func Initiate(storage storage.Storage, payment payment.Payment) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		slog.Info("create a booking")
+		slog.Info("Create booking order")
 
 		// read input from r.body
-		var booking Booking
+		var body BookingOrder
 
-		err := json.NewDecoder(r.Body).Decode(&booking)
+		err := json.NewDecoder(r.Body).Decode(&body)
 		if errors.Is(err, io.EOF) {
 			// if body is empty
 			response.WriteJson(w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("empty body")))
@@ -35,7 +36,7 @@ func Create(storage storage.Storage) http.HandlerFunc {
 		}
 
 		// first validate the inputs
-		if err := validator.New().Struct(booking); err != nil {
+		if err := validator.New().Struct(body); err != nil {
 			validationErrs := err.(validator.ValidationErrors)
 			response.WriteJson(
 				w,
@@ -45,7 +46,17 @@ func Create(storage storage.Storage) http.HandlerFunc {
 			return
 		}
 
-		userId, err := bson.ObjectIDFromHex(booking.UserId)
+		// create razorpay payment order
+		orderId, err := payment.CreateOrder(body.Amount, body.Currency)
+		if err != nil {
+			response.WriteJson(
+				w,
+				http.StatusBadGateway,
+				response.GeneralError(fmt.Errorf("payment gateway error")),
+			)
+		}
+
+		userId, err := bson.ObjectIDFromHex(body.UserId)
 		if err != nil {
 			response.WriteJson(
 				w,
@@ -54,7 +65,7 @@ func Create(storage storage.Storage) http.HandlerFunc {
 			)
 			return
 		}
-		eventId, err := bson.ObjectIDFromHex(booking.EventId)
+		eventId, err := bson.ObjectIDFromHex(body.EventId)
 		if err != nil {
 			response.WriteJson(
 				w,
@@ -64,7 +75,8 @@ func Create(storage storage.Storage) http.HandlerFunc {
 			return
 		}
 
-		bookingDetails, err := storage.CreateBooking(userId, eventId)
+		// create booking with status pending
+		pendingBooking, err := storage.CreatePendingBooking(userId, eventId, orderId, body.Currency)
 		if err != nil {
 			response.WriteJson(
 				w,
@@ -78,7 +90,7 @@ func Create(storage storage.Storage) http.HandlerFunc {
 			w,
 			http.StatusCreated,
 			response.GeneralResponse(map[string]any{
-				"bookingDetails": bookingDetails,
+				"orderId": pendingBooking.RazorpayOrderID,
 			}),
 		)
 	}
