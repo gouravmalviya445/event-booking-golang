@@ -129,6 +129,45 @@ func (m *MongoDB) CreatePendingBooking(userId, eventId bson.ObjectID, orderId, c
 	return &booking, nil
 }
 
+// update Payment ID and Signature
+func (m *MongoDB) UpdatePaymentIDAndSignature(orderId, paymentId, signature string) (*models.Booking, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	bookingCollection := m.Db.Collection("bookings")
+
+	// find whose status is pending
+	// bcz what if webhook will notify first
+	filter := bson.M{
+		"razorpayOrderId": orderId,
+		"status":          "pending",
+		"expiredAt":       bson.M{"$gt": time.Now().UTC()},
+	}
+	update := bson.M{
+		"$set": bson.M{
+			"razorpayPaymentId": paymentId,
+			"razorpaySignature": signature,
+		},
+	}
+
+	var booking models.Booking
+
+	result := bookingCollection.FindOneAndUpdate(ctx, filter, update)
+	if result.Err() != nil {
+		if errors.Is(result.Err(), mongo.ErrNoDocuments) {
+			return nil, fmt.Errorf("booking is expired or not found")
+		}
+		return nil, result.Err()
+	}
+
+	// decode booking
+	err := result.Decode(&booking)
+	if err != nil {
+		return nil, err
+	}
+
+	return &booking, nil
+}
+
 // disconnect
 func (m *MongoDB) Close(ctx context.Context) error {
 	return m.Client.Disconnect(ctx)
