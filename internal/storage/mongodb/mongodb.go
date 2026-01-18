@@ -13,7 +13,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
-	"go.mongodb.org/mongo-driver/v2/mongo/readconcern"
 )
 
 type MongoDB struct {
@@ -77,70 +76,57 @@ func New(cfg *config.Config) (*MongoDB, error) {
 // }
 
 // implement storage interface "/internal/storage/storage.go"
-func (m *MongoDB) CreateBooking(userId, eventId bson.ObjectID) (*models.Booking, error) {
+
+// create booking with status "pending"
+func (m *MongoDB) CreatePendingBooking(userId, eventId bson.ObjectID, orderId, currency string) (*models.Booking, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
 	eventCollection := m.Db.Collection("events")
 	bookingCollection := m.Db.Collection("bookings")
 
-	tnxOpts := options.
-		Transaction().
-		SetReadConcern(readconcern.Majority())
-	sessionOpts := options.
-		Session().
-		SetDefaultTransactionOptions(tnxOpts)
+	filter := bson.M{
+		"_id":            eventId,
+		"availableSeats": bson.M{"$gt": 0},
+	}
+	update := bson.M{"$inc": bson.M{"availableSeats": -1}}
 
-	// Starts a session on the client
-	session, err := m.Client.StartSession(sessionOpts)
+	var event models.Event // event model
+	result := eventCollection.FindOneAndUpdate(ctx, filter, update)
+
+	if result.Err() != nil {
+		if errors.Is(result.Err(), mongo.ErrNoDocuments) {
+			return nil, fmt.Errorf("event sold out or not found")
+		}
+		return nil, result.Err()
+	}
+
+	err := result.Decode(&event)
 	if err != nil {
 		return nil, err
 	}
 
-	defer session.EndSession(ctx)
-
-	// start transaction
-	result, err := session.WithTransaction(ctx, func(ctx context.Context) (any, error) {
-		filter := bson.M{
-			"_id":            eventId,
-			"availableSeats": bson.M{"$gt": 0},
-		}
-		update := bson.M{"$inc": bson.M{"availableSeats": -1}}
-
-		var event models.Event // event model
-		err = eventCollection.FindOneAndUpdate(ctx, filter, update).Decode(&event)
-		if err != nil {
-			if errors.Is(err, mongo.ErrNoDocuments) {
-				return nil, fmt.Errorf("event sold out or not found")
-			}
-			return nil, err
-		}
-
-		now := time.Now().UTC()
-		booking := models.Booking{
-			ID:         bson.NewObjectID(),
-			UserID:     userId,
-			EventID:    eventId,
-			Status:     "confirmed", // TODO: first payment then book
-			Tickets:    1,           // TODO: add multiple ticket buying option
-			TotalPrice: event.Price * 1,
-			CreatedAt:  now,
-			UpdatedAt:  now,
-		}
-
-		_, err = bookingCollection.InsertOne(ctx, booking)
-		if err != nil {
-			slog.Error(err.Error())
-			return nil, fmt.Errorf("failed to create booking %w", err)
-		}
-		return &booking, nil
-	})
-
-	if err != nil {
-		return nil, err
+	now := time.Now().UTC()
+	booking := models.Booking{
+		ID:              bson.NewObjectID(),
+		UserID:          userId,
+		EventID:         eventId,
+		Status:          "pending",
+		Tickets:         1,
+		RazorpayOrderID: orderId,
+		TotalPrice:      event.Price * 1,
+		Currency:        currency,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		ExpiredAt:       time.Now().Add(time.Minute * 5).UTC(), // for reserving a ticket
 	}
 
-	return result.(*models.Booking), nil
+	_, err = bookingCollection.InsertOne(ctx, booking)
+	if err != nil {
+		slog.Error(err.Error())
+		return nil, fmt.Errorf("failed to create booking %w", err)
+	}
+	return &booking, nil
 }
 
 // disconnect
