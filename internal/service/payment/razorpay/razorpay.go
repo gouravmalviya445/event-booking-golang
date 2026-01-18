@@ -1,6 +1,8 @@
 package razorpay
 
 import (
+	"crypto/rand"
+	"fmt"
 	"os"
 
 	rzp "github.com/razorpay/razorpay-go"
@@ -20,4 +22,19 @@ func New() *Razorpay {
 	return &Razorpay{
 		Client: client,
 	}
+}
+
+func (r *Razorpay) CreateOrder(amount int64, currency string) (string, error) {
+	data := map[string]any{
+		"amount":   amount,
+		"currency": currency,
+		"receipt":  fmt.Sprintf("receipt_%v", rand.Text()),
+	}
+
+	body, err := r.Client.Order.Create(data, nil)
+	if err != nil {
+		return "", fmt.Errorf("payment not initiated")
+	}
+	orderId := body["id"].(string)
+	return orderId, nil
 }
