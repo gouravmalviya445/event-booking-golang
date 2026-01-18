@@ -168,6 +168,81 @@ func (m *MongoDB) UpdatePaymentIDAndSignature(orderId, paymentId, signature stri
 	return &booking, nil
 }
 
+// update booking status
+func (m *MongoDB) UpdatePendingBooking(event, orderId, paymentId string) (*models.Booking, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	bookingCollection := m.Db.Collection("bookings")
+	eventCollection := m.Db.Collection("events")
+
+	filter := bson.M{
+		"razorpayOrderId": orderId,
+	}
+
+	var booking models.Booking
+	result := bookingCollection.FindOne(ctx, filter)
+	if result.Err() != nil {
+		return nil, fmt.Errorf("not found")
+	}
+
+	_ = result.Decode(booking)
+
+	switch event {
+	case "payment.captured":
+		if booking.Status == "success" ||
+			booking.Status == "expired" ||
+			booking.Status == "refunded" {
+			return &booking, nil
+		}
+
+		var updatedBooking models.Booking
+		isBookingExpired := time.Now().UTC().After(booking.ExpiredAt)
+		// if booking curr time is more then expiredAt of booking
+		if isBookingExpired {
+			// come after expiry initiate refund mark booking refunded
+			update := bson.M{"$set": bson.M{"status": "expired", "razorpayPaymentId": paymentId}}
+			result := bookingCollection.FindOneAndUpdate(
+				ctx, filter, update,
+				options.FindOneAndUpdate().SetReturnDocument(options.After),
+			)
+			if result.Err() != nil {
+				return nil, result.Err()
+			}
+			_ = result.Decode(updatedBooking)
+
+			// release ticket
+			filterEvent := bson.M{"_id": booking.EventID}
+			updateEvent := bson.M{"$inc": bson.M{"availableEvents": 1}}
+			resultEvent := eventCollection.FindOneAndUpdate(ctx, filterEvent, updateEvent)
+			if resultEvent.Err() != nil {
+				return nil, resultEvent.Err()
+			}
+			return &updatedBooking, nil
+		}
+
+		// now we got valid payment
+		if booking.Status == "pending" {
+			update := bson.M{"$set": bson.M{"status": "success", "paymentId": paymentId}}
+
+			result := bookingCollection.FindOneAndUpdate(
+				ctx, filter, update,
+				options.FindOneAndUpdate().SetReturnDocument(options.After),
+			)
+			if result.Err() != nil {
+				return nil, result.Err()
+			}
+			_ = result.Decode(&updatedBooking)
+			return &updatedBooking, nil
+		}
+	case "payment.failed":
+		// TODO: do something
+	case "payment.refunded":
+		// TODO: do something
+	}
+	return &booking, nil
+}
+
 // disconnect
 func (m *MongoDB) Close(ctx context.Context) error {
 	return m.Client.Disconnect(ctx)
