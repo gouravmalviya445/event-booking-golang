@@ -12,7 +12,7 @@ type Event struct {
 	Description    string        `bson:"description" json:"description"`
 	Location       string        `bson:"location" json:"location"`
 	Date           time.Time     `bson:"date" json:"date"`
-	Price          float64       `bson:"price" json:"price"`
+	Price          int           `bson:"price" json:"price"`
 	TotalSeats     int           `bson:"totalSeats" json:"totalSeats"`
 	AvailableSeats int           `bson:"availableSeats" json:"availableSeats"`
 	Status         string        `bson:"status" json:"status"`
