@@ -12,6 +12,7 @@ import (
 
 	"github.com/gouravmalviya445/event-booking-golang/internal/config"
 	"github.com/gouravmalviya445/event-booking-golang/internal/http/handlers/booking"
+	"github.com/gouravmalviya445/event-booking-golang/internal/service/payment/razorpay"
 	"github.com/gouravmalviya445/event-booking-golang/internal/storage/mongodb"
 )
 
@@ -33,10 +34,13 @@ func main() {
 		}
 	}()
 
+	// razorpay setup
+	payment := razorpay.New()
+
 	// setup router
 	r := http.NewServeMux()
 
-	r.HandleFunc("POST /api/bookings", booking.Create(storage))
+	r.HandleFunc("POST /api/bookings/order", booking.Initiate(storage, payment))
 
 	// setup server
 	srv := http.Server{
