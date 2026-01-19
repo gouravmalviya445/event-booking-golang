@@ -46,16 +46,6 @@ func Initiate(storage storage.Storage, payment payment.Payment) http.HandlerFunc
 			return
 		}
 
-		// create razorpay payment order
-		orderId, err := payment.CreateOrder(body.Amount, body.Currency)
-		if err != nil {
-			response.WriteJson(
-				w,
-				http.StatusBadGateway,
-				response.GeneralError(fmt.Errorf("payment gateway error")),
-			)
-		}
-
 		userId, err := bson.ObjectIDFromHex(body.UserId)
 		if err != nil {
 			response.WriteJson(
@@ -71,6 +61,17 @@ func Initiate(storage storage.Storage, payment payment.Payment) http.HandlerFunc
 				w,
 				http.StatusBadRequest,
 				response.GeneralError(fmt.Errorf("invalid eventId")),
+			)
+			return
+		}
+
+		// create payment order
+		orderId, err := payment.CreateOrder(body.Amount, body.Currency)
+		if err != nil {
+			response.WriteJson(
+				w,
+				http.StatusBadGateway,
+				response.GeneralError(err),
 			)
 			return
 		}
