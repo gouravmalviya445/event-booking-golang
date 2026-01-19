@@ -3,6 +3,7 @@ package razorpay
 import (
 	"crypto/rand"
 	"fmt"
+	"log/slog"
 	"os"
 
 	rzp "github.com/razorpay/razorpay-go"
@@ -11,17 +12,19 @@ import (
 
 type Razorpay struct {
 	Client *rzp.Client
+
+	// Key and Secret
+	ApiKey    string
+	ApiSecret string
 }
 
-// Key and Secret
-var apiKey = os.Getenv("RAZORPAY_KEY_ID")
-var apiSecret = os.Getenv("RAZORPAY_KEY_SECRET")
-
 func New() *Razorpay {
-	client := rzp.NewClient(apiKey, apiSecret)
+	client := rzp.NewClient(os.Getenv("RAZORPAY_API_KEY"), os.Getenv("RAZORPAY_API_SECRET"))
 
 	return &Razorpay{
-		Client: client,
+		Client:    client,
+		ApiKey:    os.Getenv("RAZORPAY_API_KEY"),
+		ApiSecret: os.Getenv("RAZORPAY_API_SECRET"),
 	}
 }
 
@@ -31,9 +34,10 @@ func (r *Razorpay) CreateOrder(amount int64, currency string) (string, error) {
 		"currency": currency,
 		"receipt":  fmt.Sprintf("receipt_%v", rand.Text()),
 	}
-
+	fmt.Println(r.ApiKey, r.ApiSecret)
 	body, err := r.Client.Order.Create(data, nil)
 	if err != nil {
+		slog.Error("Payment Order", slog.String("err", err.Error()))
 		return "", fmt.Errorf("payment not initiated")
 	}
 	orderId := body["id"].(string)
@@ -46,11 +50,11 @@ func (r *Razorpay) VerifyPayment(paymentId, orderId, signature string) bool {
 		"razorpay_payment_id": paymentId,
 	}
 
-	return utils.VerifyPaymentSignature(params, signature, apiSecret)
+	return utils.VerifyPaymentSignature(params, signature, r.ApiSecret)
 }
 
 func (r *Razorpay) VerifyWebhook(webhookBody, signature string) bool {
-	return utils.VerifyWebhookSignature(webhookBody, signature, apiSecret)
+	return utils.VerifyWebhookSignature(webhookBody, signature, r.ApiSecret)
 }
 
 func (r *Razorpay) RefundPayment(paymentId string, amount int) (string, error) {
