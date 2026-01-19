@@ -41,7 +41,9 @@ func main() {
 	r := http.NewServeMux()
 
 	r.HandleFunc("POST /api/bookings/order", booking.Initiate(storage, payment))
-
+	r.HandleFunc("POST /api/bookings/verify",booking.VerifyPayment(storage, payment))
+	r.HandleFunc("POST /api/bookings/confirm",booking.ConfirmBooking(storage, payment))
+	
 	// setup server
 	srv := http.Server{
 		Addr:    cfg.HTTPServer.Addr,
