@@ -34,7 +34,7 @@ func (r *Razorpay) CreateOrder(amount int64, currency string) (string, error) {
 		"currency": currency,
 		"receipt":  fmt.Sprintf("receipt_%v", rand.Text()),
 	}
-	fmt.Println(r.ApiKey, r.ApiSecret)
+	
 	body, err := r.Client.Order.Create(data, nil)
 	if err != nil {
 		slog.Error("Payment Order", slog.String("err", err.Error()))
