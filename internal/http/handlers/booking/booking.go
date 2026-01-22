@@ -77,7 +77,7 @@ func Initiate(storage storage.Storage, payment payment.Payment) http.HandlerFunc
 		}
 
 		// create booking with status pending
-		pendingBooking, err := storage.CreatePendingBooking(userId, eventId, orderId, body.Currency)
+		pendingBooking, err := storage.CreatePendingBooking(userId, eventId, orderId, body.Currency, body.TotalTickets)
 		if err != nil {
 			response.WriteJson(
 				w,
@@ -91,7 +91,8 @@ func Initiate(storage storage.Storage, payment payment.Payment) http.HandlerFunc
 			w,
 			http.StatusCreated,
 			response.GeneralResponse(map[string]any{
-				"orderId": pendingBooking.RazorpayOrderID,
+				"id": pendingBooking.RazorpayOrderID,
+				"amount": pendingBooking.TotalPrice,
 			}),
 		)
 	}
@@ -235,13 +236,6 @@ func ConfirmBooking(storage storage.Storage, payment payment.Payment) http.Handl
 				)
 				return
 			}
-			
-			response.WriteJson(
-				w, 
-				http.StatusAccepted,
-				response.GeneralResponse("200 OK"),
-			)
-			return
 		}
 
 		response.WriteJson(
