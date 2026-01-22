@@ -78,10 +78,11 @@ func New(cfg *config.Config) (*MongoDB, error) {
 // implement storage interface "/internal/storage/storage.go"
 
 // create booking with status "pending"
-func (m *MongoDB) CreatePendingBooking(userId, eventId bson.ObjectID, orderId, currency string) (*models.Booking, error) {
+func (m *MongoDB) CreatePendingBooking(userId, eventId bson.ObjectID, orderId, currency string, totalTickets int) (*models.Booking, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
+	// collections
 	eventCollection := m.Db.Collection("events")
 	bookingCollection := m.Db.Collection("bookings")
 
@@ -89,8 +90,9 @@ func (m *MongoDB) CreatePendingBooking(userId, eventId bson.ObjectID, orderId, c
 		"_id":            eventId,
 		"availableSeats": bson.M{"$gt": 0},
 	}
-	update := bson.M{"$inc": bson.M{"availableSeats": -1}}
+	update := bson.M{"$inc": bson.M{"availableSeats": -totalTickets}}
 
+	// find event if exist and temporarily reserve tickets
 	var event models.Event // event model
 	result := eventCollection.FindOneAndUpdate(ctx, filter, update)
 
@@ -112,7 +114,7 @@ func (m *MongoDB) CreatePendingBooking(userId, eventId bson.ObjectID, orderId, c
 		UserID:          userId,
 		EventID:         eventId,
 		Status:          "pending",
-		Tickets:         1,
+		Tickets:         totalTickets,
 		RazorpayOrderID: orderId,
 		TotalPrice:      event.Price * 1,
 		Currency:        currency,
@@ -121,6 +123,8 @@ func (m *MongoDB) CreatePendingBooking(userId, eventId bson.ObjectID, orderId, c
 		ExpiredAt:       time.Now().Add(time.Minute * 5).UTC(), // for reserving a ticket
 	}
 
+	// create booking with status "pending" and give an expiry of 5 minutes
+	// if user will not pay in this time expire the booking and release the tickets
 	_, err = bookingCollection.InsertOne(ctx, booking)
 	if err != nil {
 		slog.Error(err.Error())
@@ -133,6 +137,7 @@ func (m *MongoDB) CreatePendingBooking(userId, eventId bson.ObjectID, orderId, c
 func (m *MongoDB) UpdatePaymentIDAndSignature(orderId, paymentId, signature string) (*models.Booking, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
+
 	bookingCollection := m.Db.Collection("bookings")
 
 	// find whose status is pending
@@ -150,7 +155,6 @@ func (m *MongoDB) UpdatePaymentIDAndSignature(orderId, paymentId, signature stri
 	}
 
 	var booking models.Booking
-
 	result := bookingCollection.FindOneAndUpdate(ctx, filter, update)
 	if result.Err() != nil {
 		if errors.Is(result.Err(), mongo.ErrNoDocuments) {
@@ -201,7 +205,7 @@ func (m *MongoDB) UpdatePendingBooking(event, orderId, paymentId string) (*model
 		// if booking curr time is more then expiredAt of booking
 		if isBookingExpired {
 			// come after expiry initiate refund mark booking refunded
-			update := bson.M{"$set": bson.M{"status": "expired", "razorpayPaymentId": paymentId}}
+			update := bson.M{"$set": bson.M{"status": "expired", "razorpayPaymentId": paymentId, "updatedAt": time.Now().UTC()}}
 			result := bookingCollection.FindOneAndUpdate(
 				ctx, filter, update,
 				options.FindOneAndUpdate().SetReturnDocument(options.After),
@@ -213,7 +217,10 @@ func (m *MongoDB) UpdatePendingBooking(event, orderId, paymentId string) (*model
 
 			// release ticket
 			filterEvent := bson.M{"_id": booking.EventID}
-			updateEvent := bson.M{"$inc": bson.M{"availableEvents": 1}}
+			updateEvent := bson.M{
+				"$inc": bson.M{"availableSeats": updatedBooking.Tickets},
+				"$set": bson.M{"updatedAt": time.Now().UTC()},
+			}
 			resultEvent := eventCollection.FindOneAndUpdate(ctx, filterEvent, updateEvent)
 			if resultEvent.Err() != nil {
 				return nil, resultEvent.Err()
@@ -223,7 +230,7 @@ func (m *MongoDB) UpdatePendingBooking(event, orderId, paymentId string) (*model
 
 		// now we got valid payment
 		if booking.Status == "pending" {
-			update := bson.M{"$set": bson.M{"status": "success", "paymentId": paymentId}}
+			update := bson.M{"$set": bson.M{"status": "success", "paymentId": paymentId, "updatedAt": time.Now().UTC()}}
 
 			result := bookingCollection.FindOneAndUpdate(
 				ctx, filter, update,
