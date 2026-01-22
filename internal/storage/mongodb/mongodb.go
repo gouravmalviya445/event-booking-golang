@@ -78,7 +78,7 @@ func New(cfg *config.Config) (*MongoDB, error) {
 // implement storage interface "/internal/storage/storage.go"
 
 // create booking with status "pending"
-func (m *MongoDB) CreatePendingBooking(userId, eventId bson.ObjectID, orderId, currency string, totalTickets int) (*models.Booking, error) {
+func (m *MongoDB) CreatePendingBooking(userId, eventId bson.ObjectID, orderId, currency string, totalTickets int, amount int) (*models.Booking, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
@@ -116,7 +116,7 @@ func (m *MongoDB) CreatePendingBooking(userId, eventId bson.ObjectID, orderId, c
 		Status:          "pending",
 		Tickets:         totalTickets,
 		RazorpayOrderID: orderId,
-		TotalPrice:      event.Price * 1,
+		TotalPrice:      amount,
 		Currency:        currency,
 		CreatedAt:       now,
 		UpdatedAt:       now,

@@ -28,7 +28,7 @@ func New() *Razorpay {
 	}
 }
 
-func (r *Razorpay) CreateOrder(amount int64, currency string) (string, error) {
+func (r *Razorpay) CreateOrder(amount int, currency string) (string, error) {
 	data := map[string]any{
 		"amount":   amount,
 		"currency": currency,

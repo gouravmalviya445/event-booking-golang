@@ -77,7 +77,7 @@ func Initiate(storage storage.Storage, payment payment.Payment) http.HandlerFunc
 		}
 
 		// create booking with status pending
-		pendingBooking, err := storage.CreatePendingBooking(userId, eventId, orderId, body.Currency, body.TotalTickets)
+		pendingBooking, err := storage.CreatePendingBooking(userId, eventId, orderId, body.Currency, body.TotalTickets, body.Amount)
 		if err != nil {
 			response.WriteJson(
 				w,

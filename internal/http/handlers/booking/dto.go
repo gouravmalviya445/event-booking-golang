@@ -5,7 +5,7 @@ package booking
 type BookingOrder struct {
 	UserId       string `json:"userId" validate:"required"`
 	EventId      string `json:"eventId" validate:"required"`
-	Amount       int64  `json:"amount" validate:"required"`
+	Amount       int  `json:"amount" validate:"required"`
 	Currency     string `json:"currency" validate:"required"`
 	TotalTickets int    `json:"totalTickets" validate:"required"`
 }

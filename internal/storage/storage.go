@@ -6,7 +6,7 @@ import (
 )
 
 type Storage interface {
-	CreatePendingBooking(userId, eventId bson.ObjectID, orderId, currency string, totalTickets int) (*models.Booking, error)
+	CreatePendingBooking(userId, eventId bson.ObjectID, orderId, currency string, totalTickets int, amount int) (*models.Booking, error)
 	UpdatePaymentIDAndSignature(orderId, paymentId, signature string) (*models.Booking, error)
 	UpdatePendingBooking(event, orderId, paymentId string) (*models.Booking, error)
 }
