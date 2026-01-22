@@ -3,10 +3,11 @@ package booking
 // DTO -> Data transfer objects
 
 type BookingOrder struct {
-	UserId   string `json:"userId" validate:"required"`
-	EventId  string `json:"eventId" validate:"required"`
-	Amount   int64  `json:"amount" validate:"required"`
-	Currency string `json:"currency" validate:"required"`
+	UserId       string `json:"userId" validate:"required"`
+	EventId      string `json:"eventId" validate:"required"`
+	Amount       int64  `json:"amount" validate:"required"`
+	Currency     string `json:"currency" validate:"required"`
+	TotalTickets int    `json:"totalTickets" validate:"required"`
 }
 
 type BookingVerify struct {
@@ -14,7 +15,6 @@ type BookingVerify struct {
 	RazorpayOrderId   string `json:"razorpay_order_id" validate:"required"`
 	RazorpaySignature string `json:"razorpay_signature" validate:"required"`
 }
-
 
 // webhook data send by the razorpay in POST request to notify on event
 type BookingWebhook struct {
