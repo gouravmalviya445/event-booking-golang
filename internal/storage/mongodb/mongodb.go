@@ -197,58 +197,67 @@ func (m *MongoDB) UpdatePendingBooking(event, orderId, paymentId string) (*model
 	bookingCollection := m.Db.Collection("bookings")
 	eventCollection := m.Db.Collection("events")
 
-	filter := bson.M{
-		"razorpayOrderId": orderId,
-	}
-
-	var booking models.Booking
-	result := bookingCollection.FindOne(ctx, filter)
+	bookingFilter := bson.M{"razorpayOrderId": orderId}
+	result := bookingCollection.FindOne(ctx, bookingFilter)
 	if result.Err() != nil {
-		return nil, fmt.Errorf("not found")
+		return nil, fmt.Errorf("booking not found")
 	}
 
-	_ = result.Decode(booking)
+	// decode booking
+	var booking models.Booking
+	_ = result.Decode(&booking)
 
 	switch event {
+	case "payment.authorized":
+		slog.Info("payment is being authorized")
+		return &booking, nil
 	case "payment.captured":
-		if booking.Status == "success" ||
-			booking.Status == "expired" ||
-			booking.Status == "refunded" {
+		slog.Info("payment is being captured")
+		if booking.Status == "expired" || booking.Status == "success" || booking.Status == "refunded" {
 			return &booking, nil
 		}
 
-		var updatedBooking models.Booking
-		isBookingExpired := time.Now().UTC().After(booking.ExpiredAt)
-		// if booking curr time is more then expiredAt of booking
+		isBookingExpired := time.Now().After(booking.ExpiredAt)
 		if isBookingExpired {
-			// come after expiry initiate refund mark booking refunded
-			update := bson.M{"$set": bson.M{"status": "expired", "razorpayPaymentId": paymentId, "updatedAt": time.Now().UTC()}}
-			result := bookingCollection.FindOneAndUpdate(
-				ctx, filter, update,
-				options.FindOneAndUpdate().SetReturnDocument(options.After),
-			)
+			bookingFilter := bson.M{
+				"razorpayOrderId": orderId,
+				"status": "pending",
+			}
+			bookingUpdate := bson.M{
+				"$set": bson.M{
+					"razorpayPaymentId": paymentId,
+					"status":            "expired",
+					"updatedAt":         time.Now().UTC(),
+				},
+			}
+			result := bookingCollection.
+				FindOneAndUpdate(
+					ctx, bookingFilter, bookingUpdate,
+					options.FindOneAndUpdate().SetReturnDocument(options.After),
+				)
 			if result.Err() != nil {
 				return nil, result.Err()
 			}
-			_ = result.Decode(updatedBooking)
+			var updatedBooking models.Booking
+			_ = result.Decode(&updatedBooking)
 
-			// release ticket
-			filterEvent := bson.M{"_id": booking.EventID}
-			updateEvent := bson.M{
-				"$inc": bson.M{"availableSeats": updatedBooking.Tickets},
+			// release tickets
+			eventFilter := bson.M{"_id": booking.EventID}
+			eventUpdate := bson.M{
+				"$inc": bson.M{"availableSeats": booking.Tickets},
 				"$set": bson.M{"updatedAt": time.Now().UTC()},
 			}
-			resultEvent := eventCollection.FindOneAndUpdate(ctx, filterEvent, updateEvent)
-			if resultEvent.Err() != nil {
-				return nil, resultEvent.Err()
+			result = eventCollection.FindOneAndUpdate(ctx, eventFilter, eventUpdate)
+			if result.Err() != nil {
+				return nil, fmt.Errorf("error while releasing event tickets")
 			}
+
 			return &updatedBooking, nil
 		}
 
-		// now we got valid payment
 		if booking.Status == "pending" {
-			update := bson.M{"$set": bson.M{"status": "success", "paymentId": paymentId, "updatedAt": time.Now().UTC()}}
-
+			filter := bson.M{"_id": booking.ID, "status": booking.Status}
+			update := bson.M{"$set": bson.M{"status": "success", "updatedAt": time.Now().UTC()}}
 			result := bookingCollection.FindOneAndUpdate(
 				ctx, filter, update,
 				options.FindOneAndUpdate().SetReturnDocument(options.After),
@@ -256,15 +265,36 @@ func (m *MongoDB) UpdatePendingBooking(event, orderId, paymentId string) (*model
 			if result.Err() != nil {
 				return nil, result.Err()
 			}
+			var updatedBooking models.Booking
 			_ = result.Decode(&updatedBooking)
 			return &updatedBooking, nil
 		}
-	case "payment.failed":
-		// TODO: do something
-	case "payment.refunded":
-		// TODO: do something
 	}
-	return &booking, nil
+	return nil, nil
+}
+
+// get booking status
+func (m *MongoDB) GetBookingStatus(orderId string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	bookingCollection := m.Db.Collection("bookings")
+
+	var booking models.Booking
+	result := bookingCollection.FindOne(ctx, bson.M{"razorpayOrderId": orderId})
+
+	if result.Err() != nil {
+		if errors.Is(result.Err(), mongo.ErrNoDocuments) {
+			return "", fmt.Errorf("booking not found")
+		}
+		return "", result.Err()
+	}
+
+	err := result.Decode(&booking)
+	if err != nil {
+		return "", err
+	}
+
+	return booking.Status, nil
 }
 
 // disconnect
