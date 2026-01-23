@@ -157,8 +157,11 @@ func VerifyPayment(storage storage.Storage, payment payment.Payment) http.Handle
 
 func ConfirmBooking(storage storage.Storage, payment payment.Payment) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("Confirm booking order")
 		b, err := io.ReadAll(r.Body)
+
 		if err != nil {
+			slog.Error("error while reading body", slog.String("error", err.Error()))
 			if errors.Is(err, io.EOF) {
 				response.WriteJson(
 					w,
@@ -175,6 +178,17 @@ func ConfirmBooking(storage storage.Storage, payment payment.Payment) http.Handl
 			return
 		}
 		defer r.Body.Close()
+
+		var webhookBody BookingWebhook
+		err = json.Unmarshal(b, &webhookBody)
+		if err != nil {
+			response.WriteJson(
+				w,
+				http.StatusBadRequest,
+				response.GeneralError(err),
+			)
+			return
+		}
 
 		sign := r.Header.Get("X-Razorpay-Signature")
 
@@ -199,23 +213,12 @@ func ConfirmBooking(storage storage.Storage, payment payment.Payment) http.Handl
 			return
 		}
 
-		// read the required body
-		var webhookBody BookingWebhook
-		err = json.NewDecoder(r.Body).Decode(&webhookBody)
-		if err != nil {
-			response.WriteJson(
-				w,
-				http.StatusBadRequest,
-				response.GeneralError(err),
-			)
-			return
-		}
-
 		booking, err := storage.UpdatePendingBooking(
 			webhookBody.Event,
 			webhookBody.Payload.Payment.Entity.OrderID,
 			webhookBody.Payload.Payment.Entity.ID,
 		)
+		fmt.Println(booking)
 		if err != nil {
 			response.WriteJson(
 				w,
@@ -242,6 +245,27 @@ func ConfirmBooking(storage storage.Storage, payment payment.Payment) http.Handl
 			w,
 			http.StatusAccepted,
 			response.GeneralResponse("200 ok"),
+		)
+	}
+}
+
+func CheckBookingStatus(storage storage.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		orderId := r.URL.Query().Get("orderId")
+
+		status, err := storage.GetBookingStatus(orderId)
+		if err != nil {
+			response.WriteJson(
+				w, http.StatusInternalServerError, response.GeneralError(err),
+			)
+			return
+		}
+
+		response.WriteJson(
+			w, http.StatusOK, response.GeneralResponse(map[string]string{
+				"status": status,
+			}),
 		)
 	}
 }
