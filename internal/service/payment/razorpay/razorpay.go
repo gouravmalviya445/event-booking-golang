@@ -54,7 +54,7 @@ func (r *Razorpay) VerifyPayment(paymentId, orderId, signature string) bool {
 }
 
 func (r *Razorpay) VerifyWebhook(webhookBody, signature string) bool {
-	return utils.VerifyWebhookSignature(webhookBody, signature, r.ApiSecret)
+	return utils.VerifyWebhookSignature(webhookBody, signature, os.Getenv("RAZORPAY_WEBHOOK_SECRET"))
 }
 
 func (r *Razorpay) RefundPayment(paymentId string, amount int) (string, error) {
