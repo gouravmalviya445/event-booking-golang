@@ -10,4 +10,6 @@ type Storage interface {
 	UpdatePaymentIDAndSignature(orderId, paymentId, signature string) (*models.Booking, error)
 	UpdatePendingBooking(event, orderId, paymentId string) (*models.Booking, error)
 	GetBookingStatus(orderId string) (string, error)
+
+	GetBookings(userId bson.ObjectID) (*[]models.BookingWithEvent, error)
 }
