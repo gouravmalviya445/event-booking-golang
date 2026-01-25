@@ -221,7 +221,7 @@ func (m *MongoDB) UpdatePendingBooking(event, orderId, paymentId string) (*model
 		if isBookingExpired {
 			bookingFilter := bson.M{
 				"razorpayOrderId": orderId,
-				"status": "pending",
+				"status":          "pending",
 			}
 			bookingUpdate := bson.M{
 				"$set": bson.M{
@@ -295,6 +295,71 @@ func (m *MongoDB) GetBookingStatus(orderId string) (string, error) {
 	}
 
 	return booking.Status, nil
+}
+
+// get bookings with userid
+func (m *MongoDB) GetBookings(userId bson.ObjectID) (*[]models.BookingWithEvent, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	bookingCollection := m.Db.Collection("bookings")
+
+	matchStage := bson.D{
+		{Key: "$match", Value: bson.D{
+			{Key: "status", Value: "success"},
+			{Key: "userId", Value: userId},
+		}},
+	}
+
+	lookupStage := bson.D{
+		{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: "events"},
+			{Key: "localField", Value: "eventId"},
+			{Key: "foreignField", Value: "_id"},
+			{Key: "as", Value: "event"},
+		}},
+	}
+
+	addFieldStage := bson.D{
+		{Key: "$addFields", Value: bson.D{
+			{Key: "event", Value: bson.D{
+				{Key: "$first", Value: "$event"},
+			}},
+		}},
+	}
+
+	projectStage := bson.D{
+		{Key: "$project", Value: bson.D{
+			{Key: "totalPrice", Value: 1},
+			{Key: "tickets", Value: 1},
+			{Key: "createdAt", Value: 1},
+			{Key: "event", Value: bson.D{
+				{Key: "date", Value: 1},
+				{Key: "category", Value: 1},
+			}},
+		}},
+	}
+
+	cursor, err := bookingCollection.Aggregate(
+		ctx,
+		mongo.Pipeline{
+			matchStage,
+			lookupStage,
+			addFieldStage,
+			projectStage,
+		},
+	)
+	if err != nil {
+		slog.Error("Aggregation Pipeline", slog.String("err", err.Error()))
+		return nil, err
+	}
+
+	var bookings []models.BookingWithEvent
+	if err = cursor.All(ctx, &bookings); err != nil {
+		fmt.Println(err)
+		return nil, fmt.Errorf("error while decoding booking with event data")
+	}
+	fmt.Println(bookings)
+	return &bookings, nil
 }
 
 // disconnect
