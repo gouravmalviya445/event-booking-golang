@@ -48,7 +48,8 @@ func main() {
 	r.HandleFunc("POST /api/bookings/order", booking.Initiate(storage, payment))
 	r.HandleFunc("POST /api/bookings/verify", booking.VerifyPayment(storage, payment))
 	r.HandleFunc("POST /api/bookings/confirm", booking.ConfirmBooking(storage, payment))
-	r.HandleFunc("GET /api/bookings", booking.CheckBookingStatus(storage))
+	r.HandleFunc("GET /api/bookings/{id}", booking.CheckBookingStatus(storage))
+	r.HandleFunc("GET /api/bookings", booking.GetBookings(storage))
 
 	// setup server
 	srv := http.Server{
