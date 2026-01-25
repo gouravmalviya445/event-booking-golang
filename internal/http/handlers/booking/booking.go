@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gouravmalviya445/event-booking-golang/internal/service/payment"
@@ -91,7 +93,7 @@ func Initiate(storage storage.Storage, payment payment.Payment) http.HandlerFunc
 			w,
 			http.StatusCreated,
 			response.GeneralResponse(map[string]any{
-				"id": pendingBooking.RazorpayOrderID,
+				"id":     pendingBooking.RazorpayOrderID,
 				"amount": pendingBooking.TotalPrice,
 			}),
 		)
@@ -251,9 +253,9 @@ func ConfirmBooking(storage storage.Storage, payment payment.Payment) http.Handl
 
 func CheckBookingStatus(storage storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
-		orderId := r.URL.Query().Get("orderId")
-
+		paths := strings.Split(r.URL.Path, "/")
+		orderId := paths[len(paths)-1]
+		fmt.Println(orderId)
 		status, err := storage.GetBookingStatus(orderId)
 		if err != nil {
 			response.WriteJson(
@@ -265,6 +267,55 @@ func CheckBookingStatus(storage storage.Storage) http.HandlerFunc {
 		response.WriteJson(
 			w, http.StatusOK, response.GeneralResponse(map[string]string{
 				"status": status,
+			}),
+		)
+	}
+}
+
+func GetBookings(storage storage.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("Get Bookings")
+
+		userId := r.URL.Query().Get("userId")
+		fmt.Println(userId)
+		if userId == "" {
+			response.WriteJson(
+				w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("user id is required")),
+			)
+			return
+		}
+
+		userObjId, err := bson.ObjectIDFromHex(userId)
+		if err != nil {
+			response.WriteJson(
+				w, http.StatusBadRequest, response.GeneralError(fmt.Errorf("user id is not valid")),
+			)
+			return
+		}
+
+		bookings, err := storage.GetBookings(userObjId)
+		if err != nil {
+			response.WriteJson(
+				w, http.StatusBadRequest, response.GeneralError(err),
+			)
+			return
+		}
+
+		var totalSpent int = 0
+		var upcomingEvents int = 0
+		for _, b := range *bookings {
+			totalSpent += b.TotalPrice
+			if b.Event.Date.After(time.Now().UTC()) {
+				upcomingEvents++
+			}
+		}
+
+		response.WriteJson(
+			w, http.StatusOK, response.GeneralResponse(map[string]any{
+				"totalBookings":  len(*bookings),
+				"totalSpent":     totalSpent,
+				"upcomingEvents": upcomingEvents,
+				"bookings":       bookings,
 			}),
 		)
 	}
