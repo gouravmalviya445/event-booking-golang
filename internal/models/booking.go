@@ -33,6 +33,8 @@ type BookingWithEvent struct {
 	CreatedAt  time.Time     `bson:"createdAt" json:"createdAt"`
 	Event      struct {
 		Date     time.Time `bson:"date" json:"date"`
-		Category string `bson:"category" json:"category"`
+		Category string    `bson:"category" json:"category"`
+		Price    int       `bson:"price" json:"price"`
+		Title    string    `bson:"title" json:"title"`
 	} `bson:"event" json:"event"`
 }
