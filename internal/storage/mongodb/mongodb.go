@@ -335,6 +335,8 @@ func (m *MongoDB) GetBookings(userId bson.ObjectID) (*[]models.BookingWithEvent,
 			{Key: "event", Value: bson.D{
 				{Key: "date", Value: 1},
 				{Key: "category", Value: 1},
+				{Key: "price", Value: 1},
+				{Key: "title", Value: 1},
 			}},
 		}},
 	}
@@ -358,7 +360,7 @@ func (m *MongoDB) GetBookings(userId bson.ObjectID) (*[]models.BookingWithEvent,
 		fmt.Println(err)
 		return nil, fmt.Errorf("error while decoding booking with event data")
 	}
-	fmt.Println(bookings)
+	
 	return &bookings, nil
 }
 
