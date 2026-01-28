@@ -360,8 +360,27 @@ func (m *MongoDB) GetBookings(userId bson.ObjectID) (*[]models.BookingWithEvent,
 		fmt.Println(err)
 		return nil, fmt.Errorf("error while decoding booking with event data")
 	}
-	
+
 	return &bookings, nil
+}
+
+// get organizer events
+func (m MongoDB) GetEventsOfOrganizer(organizerId bson.ObjectID) (*[]models.Event, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 5)
+	defer cancel()
+	eventCollection := m.Db.Collection("events")
+
+	
+	cursor, err := eventCollection.Find(ctx, bson.M{"organizer": organizerId})
+	if err != nil  {
+		slog.Error("Aggregation Pipeline", slog.String("err", err.Error()))
+		return nil, err
+	}
+
+	var events []models.Event
+	cursor.All(ctx, &events)
+	
+	return &events, nil
 }
 
 // disconnect
