@@ -12,6 +12,7 @@ import (
 
 	"github.com/gouravmalviya445/event-booking-golang/internal/config"
 	"github.com/gouravmalviya445/event-booking-golang/internal/http/handlers/booking"
+	"github.com/gouravmalviya445/event-booking-golang/internal/http/handlers/event"
 	"github.com/gouravmalviya445/event-booking-golang/internal/service/payment/razorpay"
 	"github.com/gouravmalviya445/event-booking-golang/internal/storage/mongodb"
 	"github.com/gouravmalviya445/event-booking-golang/internal/worker"
@@ -27,9 +28,8 @@ func main() {
 		log.Fatal(err)
 	}
 
+	go worker.Worker(storage, time.Second*10, context.Background())
 
-	go worker.Worker(storage, time.Second * 10, context.Background())
-	
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
@@ -50,6 +50,8 @@ func main() {
 	r.HandleFunc("POST /api/bookings/confirm", booking.ConfirmBooking(storage, payment))
 	r.HandleFunc("GET /api/bookings/{id}", booking.CheckBookingStatus(storage))
 	r.HandleFunc("GET /api/bookings", booking.GetBookings(storage))
+
+	r.HandleFunc("GET /api/events", event.GetOrganizerEvents(storage))
 
 	// setup server
 	srv := http.Server{
