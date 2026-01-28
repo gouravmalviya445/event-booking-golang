@@ -12,4 +12,6 @@ type Storage interface {
 	GetBookingStatus(orderId string) (string, error)
 
 	GetBookings(userId bson.ObjectID) (*[]models.BookingWithEvent, error)
+
+	GetEventsOfOrganizer(organizerId bson.ObjectID) (*[]models.Event, error)
 }
