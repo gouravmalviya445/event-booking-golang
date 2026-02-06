@@ -11,7 +11,8 @@ type Storage interface {
 	UpdatePendingBooking(event, orderId, paymentId string) (*models.Booking, error)
 	GetBookingStatus(orderId string) (string, error)
 
-	GetBookings(userId bson.ObjectID) (*[]models.BookingWithEvent, error)
+	GetUserBookings(userId bson.ObjectID) (*[]models.BookingWithEvent, error)
+	GetBookings() (*[]models.Booking, error)
 
 	GetEventsOfOrganizer(organizerId bson.ObjectID) (*[]models.Event, error)
 }
