@@ -298,7 +298,7 @@ func (m *MongoDB) GetBookingStatus(orderId string) (string, error) {
 }
 
 // get bookings with userid
-func (m *MongoDB) GetBookings(userId bson.ObjectID) (*[]models.BookingWithEvent, error) {
+func (m *MongoDB) GetUserBookings(userId bson.ObjectID) (*[]models.BookingWithEvent, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	bookingCollection := m.Db.Collection("bookings")
@@ -366,21 +366,39 @@ func (m *MongoDB) GetBookings(userId bson.ObjectID) (*[]models.BookingWithEvent,
 
 // get organizer events
 func (m MongoDB) GetEventsOfOrganizer(organizerId bson.ObjectID) (*[]models.Event, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 5)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	eventCollection := m.Db.Collection("events")
 
-	
 	cursor, err := eventCollection.Find(ctx, bson.M{"organizer": organizerId})
-	if err != nil  {
+	if err != nil {
 		slog.Error("Aggregation Pipeline", slog.String("err", err.Error()))
 		return nil, err
 	}
 
 	var events []models.Event
 	cursor.All(ctx, &events)
-	
+
 	return &events, nil
+}
+
+func (m MongoDB) GetBookings() (*[]models.Booking, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	bookingCol := m.Db.Collection("bookings")
+
+	var bookings []models.Booking
+	cursor, err := bookingCol.Find(ctx, bson.M{"status": "success"});
+	if err != nil {
+		return nil, err
+	}
+
+	err = cursor.All(ctx, &bookings)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding bookings")
+	}
+
+	return &bookings, nil
 }
 
 // disconnect
