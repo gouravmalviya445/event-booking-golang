@@ -272,11 +272,13 @@ func CheckBookingStatus(storage storage.Storage) http.HandlerFunc {
 	}
 }
 
-func GetBookings(storage storage.Storage) http.HandlerFunc {
+func GetUserBookings(storage storage.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		slog.Info("Get Bookings")
+		slog.Info("Get User Bookings")
 
-		userId := r.URL.Query().Get("userId")
+		path := strings.Split(r.URL.Path, "/")
+		userId := path[len(path)-1]
+
 		fmt.Println(userId)
 		if userId == "" {
 			response.WriteJson(
@@ -293,7 +295,7 @@ func GetBookings(storage storage.Storage) http.HandlerFunc {
 			return
 		}
 
-		bookings, err := storage.GetBookings(userObjId)
+		bookings, err := storage.GetUserBookings(userObjId)
 		if err != nil {
 			response.WriteJson(
 				w, http.StatusBadRequest, response.GeneralError(err),
@@ -318,5 +320,30 @@ func GetBookings(storage storage.Storage) http.HandlerFunc {
 				"bookings":       bookings,
 			}),
 		)
+	}
+}
+
+func GetAllBookings(storage storage.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("Get All Successful bookings")
+		bookings, err := storage.GetBookings()
+		if err != nil {
+			response.WriteJson(
+				w, http.StatusInternalServerError, response.GeneralError(err),
+			)
+			return
+		}
+
+		var totalEarnings int = 0
+		var totalPurchases int = 0
+		for _, booking := range *bookings {
+			totalEarnings += (booking.TotalPrice / 100)
+			totalPurchases++
+		}
+
+		response.WriteJson(w, http.StatusOK, response.GeneralResponse(map[string]any{
+			"totalEarnings":  totalEarnings,
+			"totalPurchases": totalPurchases,
+		}))
 	}
 }
