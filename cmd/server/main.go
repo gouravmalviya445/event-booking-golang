@@ -45,12 +45,15 @@ func main() {
 	// setup router
 	r := http.NewServeMux()
 
+	// booking routes
 	r.HandleFunc("POST /api/bookings/order", booking.Initiate(storage, payment))
 	r.HandleFunc("POST /api/bookings/verify", booking.VerifyPayment(storage, payment))
 	r.HandleFunc("POST /api/bookings/confirm", booking.ConfirmBooking(storage, payment))
 	r.HandleFunc("GET /api/bookings/{id}", booking.CheckBookingStatus(storage))
-	r.HandleFunc("GET /api/bookings", booking.GetBookings(storage))
+	r.HandleFunc("GET /api/bookings/user/{id}", booking.GetUserBookings(storage))
+	r.HandleFunc("GET /api/bookings", booking.GetAllBookings(storage))
 
+	// event routes
 	r.HandleFunc("GET /api/events", event.GetOrganizerEvents(storage))
 
 	// setup server
