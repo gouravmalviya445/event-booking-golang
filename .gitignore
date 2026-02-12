@@ -37,3 +37,5 @@ go.work.sum
 # configuration and env file
 /config
 .env
+
+/bin

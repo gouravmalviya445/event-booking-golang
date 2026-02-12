@@ -58,7 +58,7 @@ func main() {
 
 	// setup server
 	srv := http.Server{
-		Addr:    cfg.HTTPServer.Addr,
+		Addr:    ":" + cfg.HTTPServer.Port,
 		Handler: r,
 	}
 
