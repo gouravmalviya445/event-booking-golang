@@ -68,7 +68,7 @@ func main() {
 	go func() {
 		slog.Info("Server started", slog.String("address", srv.Addr))
 		if err := srv.ListenAndServe(); err != nil {
-			log.Fatal("Failed to start server")
+			log.Fatal("Failed to start server", err)
 		}
 	}()
 
