@@ -45,6 +45,12 @@ func main() {
 	// setup router
 	r := http.NewServeMux()
 
+	// health check route
+	r.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200) // status OK
+		w.Write([]byte("ok"))
+	})
+
 	// booking routes
 	r.HandleFunc("POST /api/bookings/order", booking.Initiate(storage, payment))
 	r.HandleFunc("POST /api/bookings/verify", booking.VerifyPayment(storage, payment))
